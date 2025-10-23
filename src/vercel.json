@@ -13,6 +13,8 @@
       }
     }
   ],
+
+      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "routes": [
     {
       "src": "/api/(.*)",
