@@ -8,7 +8,10 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://n8-n-automation-surajs-projects-25c722e4.vercel.app'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Connect to MongoDB
