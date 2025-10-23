@@ -13,18 +13,6 @@
       }
     }
   ],
-
-      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ],
   "headers": [
     {
       "source": "/api/(.*)",
@@ -35,6 +23,16 @@
         { "key": "Access-Control-Allow-Credentials", "value": "true" },
         { "key": "Access-Control-Max-Age", "value": "86400" }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/backend/server.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
