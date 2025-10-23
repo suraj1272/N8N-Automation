@@ -29,7 +29,6 @@
 - [x] Add logout functionality
 
 ## Testing and Finalization
-- [x] Fix hardcoded API URLs by moving to environment variables for better deployment flexibility
 - [ ] Test backend APIs with tools like Postman
 - [ ] Test full integration: signup, login, search, progress tracking
 - [ ] Ensure CORS is configured for frontend-backend communication
