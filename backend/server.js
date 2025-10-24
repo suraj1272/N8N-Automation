@@ -66,33 +66,71 @@ app.post('/api/search/callback', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing searchId or results in callback data' });
     }
 
-    // --- <<< NEW: Handle the { "output": "..." } structure >>> ---
-    let finalResultsObject;
-    if (typeof results === 'object' && results !== null && typeof results.output === 'string') {
-      console.log('🔸 Found "output" field containing JSON string. Parsing...');
+    // --- <<< NEW: More tolerant handling for various n8n 'results' shapes >>> ---
+    // finalResultsObject will hold the parsed object (when possible)
+    let finalResultsObject = null;
+
+    // helper: try several parsing strategies for a string that should contain JSON
+    const tryParseJsonString = (s) => {
+      if (!s || typeof s !== 'string') return null;
+      // First, a direct parse
       try {
-        // Attempt to parse the JSON string within the 'output' field
-        finalResultsObject = JSON.parse(results.output);
-        console.log('✅ Successfully parsed JSON string from "output" field.');
-      } catch (parseError) {
-        console.error(`❌ Callback Error for ${searchId}: Failed to parse JSON string within 'output' field:`, parseError.message);
-        console.error('Raw output string preview:', results.output.substring(0, 300) + '...'); // Log preview
-        // Update status to failed due to parsing error
-        await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Failed to parse results structure from n8n callback" } });
-        return res.status(400).json({ success: false, message: 'Invalid JSON string received within callback results output', error: parseError.message });
+        return JSON.parse(s);
+      } catch (e) {
+        // Next, try to extract the JSON substring between first '{' and last '}'
+        const first = s.indexOf('{');
+        const last = s.lastIndexOf('}');
+        if (first !== -1 && last !== -1 && last > first) {
+          const candidate = s.slice(first, last + 1);
+          try {
+            return JSON.parse(candidate);
+          } catch (e2) {
+            // fallthrough
+          }
+        }
+        // Try unescaping common escaped quotes
+        try {
+          const unescaped = s.replace(/\\"/g, '"');
+          return JSON.parse(unescaped);
+        } catch (e3) {
+          // give up
+        }
+      }
+      return null;
+    };
+
+    // Accept several shapes:
+    // 1) results is a string containing JSON
+    // 2) results is an object with an 'output' string that contains JSON
+    // 3) results is already an object with the expected structure (levels)
+    if (typeof results === 'string') {
+      console.log('🔸 Callback: results is a string — attempting to parse JSON...');
+      finalResultsObject = tryParseJsonString(results);
+    } else if (typeof results === 'object' && results !== null && typeof results.output === 'string') {
+      console.log('🔸 Callback: results.output is a string — attempting to parse JSON...');
+      finalResultsObject = tryParseJsonString(results.output);
+      if (!finalResultsObject) {
+        console.warn(`⚠️ Parsing attempts failed for results.output (searchId: ${searchId}). Saving raw output for inspection.`);
+        console.error('Raw output preview:', results.output.substring(0, 1000));
       }
     } else if (typeof results === 'object' && results !== null && results.levels) {
-       // If n8n sends the object directly in the future, handle it
-       console.log('🔸 Received results object directly with "levels" property.');
-       finalResultsObject = results;
-    }
-     else {
-      // If the structure is completely unexpected
-      console.error(`❌ Callback Error for ${searchId}: Received results object has unexpected structure. Keys:`, Object.keys(results));
-      await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Unexpected results structure received from n8n callback" } });
+      console.log('🔸 Callback: Received results object directly with "levels" property.');
+      finalResultsObject = results;
+    } else {
+      console.error(`❌ Callback Error for ${searchId}: Received results object has unexpected structure. Type: ${typeof results}. Keys:`, (results && typeof results === 'object') ? Object.keys(results) : 'N/A');
+      await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: 'Unexpected results structure received from n8n callback', rawResults: results } });
       return res.status(400).json({ success: false, message: 'Unexpected results structure received in callback' });
     }
-    // --- <<< END: Handle the { "output": "..." } structure >>> ---
+
+    // If parsing hasn't yielded a usable object, return a helpful error and store raw data
+    if (!finalResultsObject) {
+      console.error(`❌ Callback Error for ${searchId}: Could not parse results into a valid JSON object.`);
+      // Save the raw payload for debugging in the DB (truncated)
+      const rawPreview = (typeof results === 'string') ? results.slice(0, 2000) : (results && results.output ? String(results.output).slice(0,2000) : JSON.stringify(results).slice(0,2000));
+      await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: 'Could not parse results JSON from n8n callback', rawPreview } });
+      return res.status(400).json({ success: false, message: 'Could not parse results JSON from callback', rawPreview });
+    }
+    // --- <<< END tolerant parsing logic >>> ---
 
 
     // --- Validate the PARSED results structure ---
@@ -135,4 +173,13 @@ app.post('/api/search/callback', async (req, res) => {
 // --- Vercel Export ---
 // This line is essential for Vercel to run your Express app as a serverless function.
 // It replaces the traditional app.listen(PORT, ...)
+
+// For local development, start the server if this file is run directly
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
 module.exports = app;

@@ -220,7 +220,7 @@ const handleGenerate = async () => {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
 
   return (
@@ -256,7 +256,7 @@ const handleGenerate = async () => {
                 Back to Dashboard
               </Button>
             </Link>
-          </div>const ha
+          </div>
         </Card>
 
         {loading && <Card className="p-8"><Loader /></Card>}
