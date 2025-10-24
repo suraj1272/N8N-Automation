@@ -172,7 +172,7 @@ function Dashboard() {
   const loadSearchHistory = async () => {
     if (!token) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/search`, {
+      const response = await fetch(`${API_BASE_URL}/api/search`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
@@ -194,7 +194,7 @@ function Dashboard() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/search`, {
+      const response = await fetch(`${API_BASE_URL}/api/search`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -235,7 +235,7 @@ function Dashboard() {
     }
 
     try {
-      await fetch(`${API_BASE_URL}/progress`, {
+      await fetch(`${API_BASE_URL}/api/progress`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -256,7 +256,7 @@ function Dashboard() {
   const loadProgress = async (searchId) => {
     if (!token) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/progress/${searchId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/progress/${searchId}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
