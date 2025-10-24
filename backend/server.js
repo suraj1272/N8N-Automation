@@ -29,8 +29,8 @@ mongoose.connect(process.env.MONGO_URI, {
 // Routes
 // We remove '/api' because vercel.json already handles it
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/search', require('./routes/search'));
-app.use('/api/progress', require('./routes/progress'));
+app.use('/search', require('./routes/search'));
+app.use('/progress', require('./routes/progress'));
 
 // Export the app for Vercel (THIS IS CRITICAL)
 // DO NOT USE app.listen()
