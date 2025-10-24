@@ -9,7 +9,12 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://n8-n-automation-frontend.vercel.app', process.env.FRONTEND_URL].filter(Boolean),
+  // 1. FIXED: Your frontend is Vite, so it runs on port 5173, not 3000
+  origin: [
+    'http://localhost:5173', 
+    'https://n8-n-automation-frontend.vercel.app', 
+    process.env.FRONTEND_URL
+  ].filter(Boolean),
   credentials: true
 }));
 app.use(express.json());
@@ -23,14 +28,18 @@ mongoose.connect(process.env.MONGO_URI, {
 .catch(err => console.log(err));
 
 // ✅ Simple public endpoint
+// This will now be at /api/
 app.get('/', (req, res) => {
   res.send('✅ Backend is running successfully!');
 });
 
 // Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/search', require('./routes/search'));
-app.use('/api/progress', require('./routes/progress'));
+// 2. FIXED: Removed /api prefix because vercel.json already adds it
+// (This stops /api/api/auth)
+app.use('/auth', require('./routes/auth'));
+app.use('/search', require('./routes/search'));
+app.use('/progress', require('./routes/progress'));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// 3. FIXED: Replaced app.listen() with module.exports
+// Vercel is serverless and needs this to run your code
+module.exports = app;
