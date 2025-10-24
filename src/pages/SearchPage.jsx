@@ -151,7 +151,7 @@ function SearchPage() {
     }
   }, [token]);
 
-  const handleGenerate = async () => {
+onst handleGenerate = async () => {
     if (!topic || !token) {
       alert("Please enter a topic and ensure you're logged in");
       return;
@@ -169,33 +169,53 @@ function SearchPage() {
         body: JSON.stringify({ topic }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      // --- NEW LOGIC START ---
 
-      const result = await response.json();
-      console.log("🧠 Search created successfully:", result);
+      // Check if the response status is 202 (Accepted)
+      if (response.status === 202) {
+        const result = await response.json(); // Get the { message, searchId, status }
+        console.log("✅ Processing initiated:", result);
+        // Optionally: Show a success message briefly before redirecting
+        // Example: alert("Processing started! You'll be redirected to My Topics.");
+        navigate('/my-topics'); // Redirect to where the user can see status
+        // --- NEW LOGIC END ---
 
-      if (result.success) {
-        // Redirect to My Topics page after successful search
-        navigate('/my-topics');
+      } else if (!response.ok) {
+        // Handle other non-ok responses (like 400, 404, 500, 504)
+        let errorResult;
+        try {
+          // Try to parse error JSON from backend
+          errorResult = await response.json();
+        } catch (jsonError) {
+          // If response is not JSON (e.g., plain text or HTML error page)
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        // Throw specific error message from backend if available
+        throw new Error(errorResult.message || `HTTP error! status: ${response.status}`);
+
       } else {
-        throw new Error(result.message || 'Failed to create search');
+         // Handle unexpected success (200 OK - should not happen now)
+         // This case might indicate the backend hasn't been updated yet
+         console.warn("Received unexpected 200 OK response, expected 202 Accepted.");
+         const result = await response.json();
+         // Attempt to navigate anyway, but log the warning
+         navigate('/my-topics');
       }
+
     } catch (err) {
-      console.error("Error generating content:", err);
+      console.error("Error initiating content generation:", err);
 
-      // Handle specific error types
-      if (err.message.includes('PROCESSING') || err.message.includes('checkLater')) {
-        setError("Your request is being processed in the background. Please check your 'My Topics' page in a few minutes to see the generated content.");
-        // Still redirect to My Topics so user can see when it completes
-        setTimeout(() => navigate('/my-topics'), 2000);
-      } else if (err.message.includes('timed out') || err.message.includes('TIMEOUT')) {
-        setError("The AI processing is taking longer than expected. Please try again in a few moments.");
-      } else if (err.message.includes('webhook') || err.message.includes('WEBHOOK_NOT_FOUND')) {
-        setError("There seems to be an issue with the AI service configuration. Please contact support.");
-      } else {
-        setError("Failed to generate content. Please try again.");
+      // More specific error messages based on potential backend responses
+      if (err.message.includes('INITIAL_TIMEOUT') || err.message.includes('504')) {
+        setError("The request to start generation timed out. Please try again.");
+      } else if (err.message.includes('WEBHOOK_NOT_FOUND') || err.message.includes('404')) {
+        // Note: A 404 *could* also mean the /api/search endpoint itself wasn't found
+        setError("Could not find the generation service. Please check configuration or contact support.");
+      } else if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+         setError("Authentication error. Please log out and log back in.");
+      }
+       else {
+        setError(`Failed to start generation: ${err.message}. Please try again.`);
       }
     } finally {
       setLoading(false);
@@ -237,7 +257,7 @@ function SearchPage() {
                 Back to Dashboard
               </Button>
             </Link>
-          </div>
+          </div>const ha
         </Card>
 
         {loading && <Card className="p-8"><Loader /></Card>}

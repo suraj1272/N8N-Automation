@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { BookOpen, Code, Video, Download, LogOut, Search, CheckCircle, Circle, Trophy, Clock } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom"; // Use useNavigate instead of window.location
+import { BookOpen, LogOut, Search, Clock, RefreshCw, Eye, Trash2, AlertTriangle, CheckCircle } from "lucide-react"; // Added/cleaned up icons
 import config from "../config";
 
-// Reusable Components
+// --- Reusable Components (Keep these as they are or as updated previously) ---
 const Card = ({ children, className = "" }) => (
   <div className={`bg-white rounded-xl shadow-sm border border-gray-100 ${className}`}>
     {children}
@@ -24,307 +24,149 @@ const Button = ({ children, variant = "primary", size = "md", disabled, onClick,
     md: "px-4 py-2.5",
     lg: "px-6 py-3 text-lg"
   };
-
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-    >
+    <button onClick={onClick} disabled={disabled} className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
       {children}
     </button>
   );
 };
 
-const Input = ({ value, onChange, placeholder, className = "" }) => (
-  <input
-    type="text"
-    value={value}
-    onChange={onChange}
-    placeholder={placeholder}
-    className={`w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${className}`}
-  />
-);
-
-const Badge = ({ children, variant = "default" }) => {
+const Badge = ({ children, variant = "default", className = "" }) => {
   const variants = {
     default: "bg-blue-100 text-blue-700",
     success: "bg-green-100 text-green-700",
-    warning: "bg-yellow-100 text-yellow-700"
+    warning: "bg-yellow-100 text-yellow-700",
+    danger: "bg-red-100 text-red-700",
+    processing: "bg-purple-100 text-purple-700 animate-pulse"
   };
-
   return (
-    <span className={`px-3 py-1 rounded-full text-sm font-medium ${variants[variant]}`}>
+    <span className={`px-3 py-1 rounded-full text-sm font-medium inline-flex items-center gap-1.5 ${variants[variant]} ${className}`}>
       {children}
     </span>
   );
 };
 
-const Loader = () => (
+const Loader = ({ message = "Loading..." }) => (
   <div className="flex flex-col items-center justify-center py-12">
     <div className="relative w-16 h-16">
       <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-200 rounded-full"></div>
       <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
     </div>
-    <p className="mt-4 text-gray-600 font-medium">Generating your content...</p>
+    <p className="mt-4 text-gray-600 font-medium">{message}</p>
   </div>
 );
 
-const ModuleCard = ({ module, index, isRead, onMarkRead }) => (
-  <div className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-    <div className="flex items-start justify-between gap-4">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-2">
-          {isRead ? (
-            <CheckCircle className="text-green-600 flex-shrink-0" size={20} />
-          ) : (
-            <Circle className="text-gray-400 flex-shrink-0" size={20} />
-          )}
-          <h4 className="font-semibold text-gray-900">{module.title}</h4>
-        </div>
-        <p className="text-gray-600 text-sm leading-relaxed ml-7">{module.content}</p>
-      </div>
-      <Button
-        variant={isRead ? "success" : "primary"}
-        size="sm"
-        onClick={onMarkRead}
-        disabled={isRead}
-      >
-        {isRead ? "Read" : "Mark Read"}
-      </Button>
-    </div>
-  </div>
-);
-
-const QuizCard = ({ quiz, index, isCompleted, onMarkComplete }) => (
-  <div className="p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg">
-    <div className="flex items-start justify-between gap-4 mb-3">
-      <div className="flex items-start gap-2 flex-1">
-        <span className="font-bold text-purple-600 mt-1">Q{index + 1}</span>
-        <p className="font-medium text-gray-900">{quiz.question}</p>
-      </div>
-      <Button
-        variant={isCompleted ? "success" : "primary"}
-        size="sm"
-        onClick={onMarkComplete}
-        disabled={isCompleted}
-      >
-        {isCompleted ? "Done" : "Complete"}
-      </Button>
-    </div>
-    <div className="ml-8 p-3 bg-white rounded-lg border border-green-200">
-      <p className="text-sm text-gray-700">
-        <span className="font-semibold text-green-700">Answer:</span> {quiz.answer}
-      </p>
-    </div>
-  </div>
-);
-
-const CodingProblemCard = ({ problem, index }) => (
-  <div className="p-4 bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg border border-gray-200">
-    <div className="flex items-center gap-2 mb-3">
-      <Code className="text-blue-600" size={20} />
-      <h4 className="font-semibold text-gray-900">Problem {index + 1}</h4>
-    </div>
-    <p className="text-gray-700 mb-4">{problem.problem}</p>
-    <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-      <pre className="text-sm text-green-400 font-mono">
-        <code>{problem.solution}</code>
-      </pre>
-    </div>
-  </div>
-);
+// --- End Reusable Components ---
 
 function Dashboard() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null); // Store basic user info
   const [token, setToken] = useState(localStorage.getItem('token'));
-  const [topic, setTopic] = useState("");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [searchHistory, setSearchHistory] = useState([]);
-  const [currentSearchId, setCurrentSearchId] = useState(null);
-  const [progress, setProgress] = useState({ modulesRead: [], quizzesCompleted: [] });
+  const [loadingHistory, setLoadingHistory] = useState(true); // Specific loading state for history
+  const [historyError, setHistoryError] = useState(null); // Specific error state for history
+  const navigate = useNavigate();
 
-  const API_BASE_URL = config.API_BASE_URL;
+  const API_BASE_URL = config.API_BASE_URL; // Should be '' for production build
 
+  // --- Effect to check token and load initial data ---
   useEffect(() => {
     if (!token) {
-      window.location.href = '/login';
+      navigate('/login'); // Use navigate for internal routing
       return;
     }
-    // Mock user data, in real app you'd decode token or fetch user info
+    // TODO: Replace mock user with actual user info (e.g., decode JWT or fetch /api/auth/me)
     setUser({ email: 'user@example.com' });
     loadSearchHistory();
-  }, [token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, navigate]); // Dependencies for this effect
 
+  // --- Logout Handler ---
   const handleLogout = () => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
-    setData(null);
     setSearchHistory([]);
-    setCurrentSearchId(null);
-    setProgress({ modulesRead: [], quizzesCompleted: [] });
-    window.location.href = '/login';
+    navigate('/login'); // Redirect to login page
   };
 
+  // --- Load Search History ---
   const loadSearchHistory = async () => {
     if (!token) return;
+    setLoadingHistory(true);
+    setHistoryError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/search`, {
+      const response = await fetch(`${API_BASE_URL}/api/search`, { // Correct endpoint
         headers: { 'Authorization': `Bearer ${token}` },
       });
-      if (response.ok) {
-        const history = await response.json();
-        setSearchHistory(history);
+
+      const result = await response.json(); // Always try parsing
+
+      if (response.ok && result.success) {
+        setSearchHistory(result.searches || []); // Use the 'searches' array
+      } else {
+         // Throw error using message from backend if available
+        throw new Error(result.message || `HTTP error! status: ${response.status}`);
       }
     } catch (err) {
       console.error('Error loading search history:', err);
-    }
-  };
-
-  const handleGenerate = async () => {
-    if (!topic || !token) {
-      alert("Please enter a topic and ensure you're logged in");
-      return;
-    }
-    setLoading(true);
-    setData(null);
-    setError(null);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/search`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({ topic }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      setData(result.data);
-      setCurrentSearchId(result.searchId);
-      setProgress({ modulesRead: [], quizzesCompleted: [] });
-      loadSearchHistory();
-    } catch (err) {
-      console.error("Error fetching data:", err);
-      setError("Failed to generate content. Please try again.");
+      setHistoryError('Failed to load your recent topics. Please try again.');
     } finally {
-      setLoading(false);
+      setLoadingHistory(false);
     }
   };
 
-  const updateProgress = async (type, index) => {
-    if (!currentSearchId || !token) return;
-
-    const newProgress = { ...progress };
-    if (type === 'module') {
-      if (!newProgress.modulesRead.includes(index)) {
-        newProgress.modulesRead.push(index);
-      }
-    } else if (type === 'quiz') {
-      if (!newProgress.quizzesCompleted.includes(index)) {
-        newProgress.quizzesCompleted.push(index);
-      }
-    }
-
-    try {
-      await fetch(`${API_BASE_URL}/api/progress`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          searchId: currentSearchId,
-          modulesRead: newProgress.modulesRead,
-          quizzesCompleted: newProgress.quizzesCompleted,
-        }),
-      });
-      setProgress(newProgress);
-    } catch (err) {
-      console.error('Error updating progress:', err);
-    }
+  // --- Handle Clicking a Previous Search ---
+  // Renamed from loadPreviousSearch for clarity
+  const handleViewTopic = (searchId) => {
+     // Navigate to the dedicated topic view page.
+     // That page will handle fetching the details and showing status.
+     navigate(`/topic/${searchId}`);
   };
 
-  const loadProgress = async (searchId) => {
-    if (!token) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/progress/${searchId}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const prog = await response.json();
-        setProgress(prog);
-      }
-    } catch (err) {
-      console.error('Error loading progress:', err);
-    }
-  };
 
-  const loadPreviousSearch = (search) => {
-    setTopic(search.topic);
-    setData(search.responseData);
-    setCurrentSearchId(search._id);
-    loadProgress(search._id);
-  };
-
-  const handleDownload = () => {
-    if (!data) {
-      alert("No data to download");
-      return;
-    }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${topic.replace(/\s+/g, '_')}_learning_data.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
-
-  const totalProgress = data ? progress.modulesRead.length + progress.quizzesCompleted.length : 0;
-  const totalItems = data ? (data.modules?.length || 0) + (data.quiz?.length || 0) : 0;
-
+  // --- Render Logic ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Header Section */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 to-purple-600 rounded-3xl mb-6 shadow-lg">
             <BookOpen className="text-white" size={40} />
           </div>
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
-            Learning Content Generator
+          <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+            Learning Dashboard
           </h1>
-          <p className="text-xl text-gray-600">
-            AI-powered personalized learning paths for any topic
+          <p className="text-lg sm:text-xl text-gray-600">
+            Welcome back! Manage your topics and track your progress.
           </p>
         </div>
 
-        <Card className="p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                {user?.email[0].toUpperCase()}
+        {/* User Info & Actions Card */}
+        <Card className="p-4 sm:p-6 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                {user?.email ? user.email[0].toUpperCase() : '?'}
               </div>
               <div>
-                <p className="font-semibold text-gray-900">{user?.email}</p>
-                <p className="text-sm text-gray-500">Learning Dashboard</p>
+                <p className="font-semibold text-gray-900 truncate max-w-[200px] sm:max-w-xs">{user?.email}</p>
+                <p className="text-sm text-gray-500">Your Learning Space</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Link to="/my-topics">
-                <Button variant="secondary">
-                  <BookOpen size={18} />
-                  My Topics
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Link to="/search">
+                <Button variant="primary" size="md">
+                  <Search size={18} />
+                  New Topic
                 </Button>
               </Link>
-              <Button variant="danger" onClick={handleLogout}>
+              <Link to="/my-topics">
+                 <Button variant="secondary" size="md">
+                   <BookOpen size={18} />
+                   My Topics
+                 </Button>
+               </Link>
+              <Button variant="danger" size="md" onClick={handleLogout}>
                 <LogOut size={18} />
                 Logout
               </Button>
@@ -332,173 +174,60 @@ function Dashboard() {
           </div>
         </Card>
 
-        {searchHistory.length > 0 && (
-          <Card className="p-6 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="text-gray-600" size={20} />
-              <h3 className="font-semibold text-gray-900">Recent Searches</h3>
-            </div>
+        {/* Recent Searches Section */}
+        <Card className="p-4 sm:p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                 <Clock className="text-gray-600" size={20} />
+                 <h3 className="text-xl font-semibold text-gray-900">Recent Topics</h3>
+              </div>
+              <Button variant="ghost" size="sm" onClick={loadSearchHistory} disabled={loadingHistory}>
+                 <RefreshCw size={16} className={loadingHistory ? 'animate-spin' : ''}/>
+                 {loadingHistory ? 'Refreshing...' : 'Refresh'}
+              </Button>
+          </div>
+
+          {loadingHistory && <Loader message="Loading history..." />}
+
+          {historyError && (
+             <div className="p-4 border border-red-200 bg-red-50 rounded-lg text-red-700">
+               {historyError}
+             </div>
+          )}
+
+          {!loadingHistory && !historyError && searchHistory.length === 0 && (
+             <p className="text-gray-500 text-center py-4">You haven't searched for any topics yet.</p>
+          )}
+
+          {!loadingHistory && !historyError && searchHistory.length > 0 && (
             <div className="flex flex-wrap gap-2">
+              {/* Show only the 5 most recent */}
               {searchHistory.slice(0, 5).map((search) => (
                 <button
                   key={search._id}
-                  onClick={() => loadPreviousSearch(search)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                  onClick={() => handleViewTopic(search._id)} // Pass only ID
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors flex items-center gap-2"
+                  title={`View topic: ${search.topic}`}
                 >
-                  {search.topic}
+                   {/* Optionally add status icon */}
+                   {search.status === 'completed' && <CheckCircle size={14} className="text-green-600"/>}
+                   {search.status === 'processing' && <RefreshCw size={14} className="text-purple-600 animate-spin"/>}
+                   {search.status === 'failed' && <AlertTriangle size={14} className="text-red-600"/>}
+                   {search.topic}
                 </button>
               ))}
+              {searchHistory.length > 5 && (
+                 <Link to="/my-topics" className="px-4 py-2 text-sm font-medium text-blue-600 hover:underline">
+                   View all ({searchHistory.length}) →
+                 </Link>
+              )}
             </div>
-          </Card>
-        )}
+          )}
+        </Card>
 
-            <Card className="p-6 mb-6">
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <Input
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    placeholder="Enter any topic... e.g., Introduction to Python"
-                  />
-                </div>
-                <Link to="/search">
-                  <Button variant="primary">
-                    <Search size={20} />
-                    Go to Search Page
-                  </Button>
-                </Link>
-                <Button variant="success" onClick={handleDownload} disabled={!data}>
-                  <Download size={20} />
-                  Download
-                </Button>
-              </div>
-            </Card>
+         {/* Removed the search input and generate button from here */}
+         {/* Removed the display area for 'data' - this belongs on the TopicViewPage */}
 
-        {loading && <Card className="p-8"><Loader /></Card>}
-
-        {error && (
-          <Card className="p-6 mb-6 border-red-200 bg-red-50">
-            <p className="text-red-700 font-medium">{error}</p>
-          </Card>
-        )}
-
-        {data && (
-          <div className="space-y-6">
-            <Card className="p-6 bg-gradient-to-br from-blue-600 to-purple-600 text-white">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-3xl font-bold mb-2">{topic}</h2>
-                  <p className="opacity-90">Your personalized learning path</p>
-                </div>
-                <Trophy size={48} className="opacity-80" />
-              </div>
-              <div className="mt-6">
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Overall Progress</span>
-                  <span className="text-sm font-medium">{totalProgress}/{totalItems} completed</span>
-                </div>
-                <div className="w-full bg-white/20 rounded-full h-3">
-                  <div
-                    className="bg-white h-full rounded-full transition-all duration-500"
-                    style={{ width: `${totalItems > 0 ? (totalProgress / totalItems) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            </Card>
-
-            {data.modules && (
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <BookOpen className="text-blue-600" size={24} />
-                    <h3 className="text-2xl font-bold text-gray-900">Learning Modules</h3>
-                  </div>
-                  <Badge variant="default">
-                    {progress.modulesRead.length}/{data.modules.length} Complete
-                  </Badge>
-                </div>
-                <div className="space-y-3">
-                  {data.modules.map((module, index) => (
-                    <ModuleCard
-                      key={index}
-                      module={module}
-                      index={index}
-                      isRead={progress.modulesRead.includes(index)}
-                      onMarkRead={() => updateProgress('module', index)}
-                    />
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {data.quiz && (
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle className="text-purple-600" size={24} />
-                    <h3 className="text-2xl font-bold text-gray-900">Knowledge Check</h3>
-                  </div>
-                  <Badge variant="warning">
-                    {progress.quizzesCompleted.length}/{data.quiz.length} Answered
-                  </Badge>
-                </div>
-                <div className="space-y-4">
-                  {data.quiz.map((q, index) => (
-                    <QuizCard
-                      key={index}
-                      quiz={q}
-                      index={index}
-                      isCompleted={progress.quizzesCompleted.includes(index)}
-                      onMarkComplete={() => updateProgress('quiz', index)}
-                    />
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {data.coding_problems && (
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <Code className="text-blue-600" size={24} />
-                  <h3 className="text-2xl font-bold text-gray-900">Coding Challenges</h3>
-                </div>
-                <div className="space-y-4">
-                  {data.coding_problems.map((prob, index) => (
-                    <CodingProblemCard key={index} problem={prob} index={index} />
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {data.youtube_videos && (
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <Video className="text-red-600" size={24} />
-                  <h3 className="text-2xl font-bold text-gray-900">Video Resources</h3>
-                </div>
-                <div className="grid gap-3">
-                  {data.youtube_videos.map((video, index) => (
-                    <a
-                      key={index}
-                      href={video}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group"
-                    >
-                      <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Video className="text-white" size={20} />
-                      </div>
-                      <span className="text-gray-700 group-hover:text-blue-600 transition-colors flex-1 truncate">
-                        {video}
-                      </span>
-                      <span className="text-gray-400 group-hover:text-blue-600">→</span>
-                    </a>
-                  ))}
-                </div>
-              </Card>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
