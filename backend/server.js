@@ -55,10 +55,9 @@ app.use('/api/progress', progressRoutes);
 // --- Callback Endpoint for n8n ---
 // This is the new route n8n will call when the AI processing is finished
 app.post('/api/search/callback', async (req, res) => {
-  console.log('✅ Received callback from n8n. Body:', req.body); // Log the data received from n8n
+  console.log('✅ Received callback from n8n. Body:', req.body);
 
   try {
-    // Extract the searchId and results data that n8n sends back
     const { searchId, results } = req.body;
 
     // --- Basic Validation ---
@@ -67,54 +66,71 @@ app.post('/api/search/callback', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing searchId or results in callback data' });
     }
 
-    // Optional: Add more specific validation for the 'results' structure if needed
-    if (typeof results !== 'object' || results === null || !results.levels) {
-         console.error(`❌ Callback Error for ${searchId}: Received results are not a valid object with a 'levels' property.`);
-         // Decide how to handle bad data: Update status to 'failed' or just log and ignore?
-         // Let's try to update status to failed
-          await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Invalid results structure received from n8n callback" } });
-         return res.status(400).json({ success: false, message: 'Invalid results structure received in callback' });
+    // --- <<< NEW: Handle the { "output": "..." } structure >>> ---
+    let finalResultsObject;
+    if (typeof results === 'object' && results !== null && typeof results.output === 'string') {
+      console.log('🔸 Found "output" field containing JSON string. Parsing...');
+      try {
+        // Attempt to parse the JSON string within the 'output' field
+        finalResultsObject = JSON.parse(results.output);
+        console.log('✅ Successfully parsed JSON string from "output" field.');
+      } catch (parseError) {
+        console.error(`❌ Callback Error for ${searchId}: Failed to parse JSON string within 'output' field:`, parseError.message);
+        console.error('Raw output string preview:', results.output.substring(0, 300) + '...'); // Log preview
+        // Update status to failed due to parsing error
+        await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Failed to parse results structure from n8n callback" } });
+        return res.status(400).json({ success: false, message: 'Invalid JSON string received within callback results output', error: parseError.message });
+      }
+    } else if (typeof results === 'object' && results !== null && results.levels) {
+       // If n8n sends the object directly in the future, handle it
+       console.log('🔸 Received results object directly with "levels" property.');
+       finalResultsObject = results;
+    }
+     else {
+      // If the structure is completely unexpected
+      console.error(`❌ Callback Error for ${searchId}: Received results object has unexpected structure. Keys:`, Object.keys(results));
+      await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Unexpected results structure received from n8n callback" } });
+      return res.status(400).json({ success: false, message: 'Unexpected results structure received in callback' });
+    }
+    // --- <<< END: Handle the { "output": "..." } structure >>> ---
+
+
+    // --- Validate the PARSED results structure ---
+     if (!finalResultsObject || typeof finalResultsObject !== 'object' || !finalResultsObject.levels) {
+        console.error(`❌ Callback Error for ${searchId}: Parsed results object is invalid or missing 'levels'.`);
+         await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Parsed results structure is invalid" } });
+         return res.status(400).json({ success: false, message: 'Parsed results structure is invalid' });
      }
     // --- End Validation ---
 
 
-    // Find the original search record in MongoDB using the searchId
+    // Find the original search record and update it
     const updatedSearch = await Search.findByIdAndUpdate(
       searchId,
       {
-        responseData: results, // Save the AI-generated 'results' data into the 'responseData' field
-        status: 'completed'   // Update the status field to 'completed'
+        responseData: finalResultsObject, // Save the PARSED object
+        status: 'completed'
       },
-      { new: true } // Option to return the updated document (optional)
+      { new: true }
     );
 
-    // Check if the search record was found and updated
     if (!updatedSearch) {
-      console.error(`❌ Callback Error: Could not find Search record with ID: ${searchId}. Maybe it was deleted?`);
-      // n8n might send a callback for a search the user already deleted
-      return res.status(404).json({ success: false, message: 'Search record not found for the provided ID. It might have been deleted.' });
+      console.error(`❌ Callback Error: Could not find Search record with ID: ${searchId}.`);
+      return res.status(404).json({ success: false, message: 'Search record not found for the provided ID.' });
     }
 
     console.log(`✅ Callback Success: Successfully updated search record ${searchId} with status 'completed'.`);
-
-    // Send a success response back to n8n to acknowledge receipt
     res.status(200).json({ success: true, message: 'Callback received and processed successfully' });
 
   } catch (error) {
-    // Catch any unexpected errors during callback processing
     console.error('❌ Critical Error processing n8n callback:', error.message);
-    console.error('Stack Trace:', error.stack); // Log stack trace for detailed debugging
-
-     // Handle potential CastError if searchId format is wrong (though unlikely from n8n)
+    console.error('Stack Trace:', error.stack);
      if (error.name === 'CastError') {
        return res.status(400).json({ success: false, message: 'Invalid Search ID format received in callback', error: error.message });
      }
-
-    // Send a generic server error response back to n8n
     res.status(500).json({ success: false, message: 'Internal server error processing callback', error: error.message });
   }
 });
-
 
 // --- Vercel Export ---
 // This line is essential for Vercel to run your Express app as a serverless function.
