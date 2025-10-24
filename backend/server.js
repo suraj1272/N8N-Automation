@@ -58,7 +58,23 @@ app.post('/api/search/callback', async (req, res) => {
   console.log('✅ Received callback from n8n. Body:', req.body);
 
   try {
-    const { searchId, results } = req.body;
+    // Normalize incoming payload: n8n sometimes sends an array of items or wraps data under .json or .body
+    let payload = req.body;
+    if (Array.isArray(payload) && payload.length > 0) {
+      console.log('🔸 Callback: received array payload from n8n; using first item for processing.');
+      payload = payload[0];
+    }
+    // Unwrap common wrappers added by n8n nodes
+    if (payload && typeof payload === 'object' && payload.json && typeof payload.json === 'object' && (payload.json.searchId || payload.json.results)) {
+      console.log('🔸 Callback: unwrapping payload.json wrapper from n8n node.');
+      payload = payload.json;
+    }
+    if (payload && typeof payload === 'object' && payload.body && (payload.body.searchId || payload.body.results)) {
+      console.log('🔸 Callback: unwrapping payload.body wrapper (e.g., webhook body).');
+      payload = payload.body;
+    }
+
+    const { searchId, results } = payload || {};
 
     // --- Basic Validation ---
     if (!searchId || !results) {
@@ -133,12 +149,57 @@ app.post('/api/search/callback', async (req, res) => {
     // --- <<< END tolerant parsing logic >>> ---
 
 
+    // If parsed object doesn't contain 'levels' directly, try to locate it anywhere nested inside
+    const findNestedProperty = (obj, propName, maxDepth = 6) => {
+      const seen = new Set();
+      const stack = [{ value: obj, path: [] }];
+      while (stack.length) {
+        const { value, path } = stack.pop();
+        if (!value || typeof value !== 'object') continue;
+        if (seen.has(value)) continue;
+        seen.add(value);
+        if (Object.prototype.hasOwnProperty.call(value, propName)) {
+          return { parent: value, key: propName, value: value[propName], path };
+        }
+        if (path.length >= maxDepth) continue;
+        for (const k of Object.keys(value)) {
+          try {
+            stack.push({ value: value[k], path: path.concat(k) });
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+      return null;
+    };
+
+    if (!finalResultsObject.levels) {
+      console.log(`🔎 'levels' not found at top-level for searchId ${searchId}. Attempting nested search...`);
+      const found = findNestedProperty(finalResultsObject, 'levels');
+      if (found) {
+        console.log(`✅ Found nested 'levels' at path: ${found.path.join('.')} for searchId ${searchId}.`);
+        let levelsValue = found.value;
+        // If levelsValue is a string, try to parse it
+        if (typeof levelsValue === 'string') {
+          const parsed = tryParseJsonString(levelsValue);
+          if (parsed) {
+            levelsValue = parsed;
+            console.log(`✅ Parsed nested 'levels' string into object for searchId ${searchId}.`);
+          } else {
+            console.warn(`⚠️ Nested 'levels' was a string but parsing failed for searchId ${searchId}.`);
+          }
+        }
+        // Build a normalized finalResultsObject with the located levels
+        finalResultsObject = Object.assign({}, finalResultsObject, { levels: levelsValue });
+      }
+    }
+
     // --- Validate the PARSED results structure ---
-     if (!finalResultsObject || typeof finalResultsObject !== 'object' || !finalResultsObject.levels) {
-        console.error(`❌ Callback Error for ${searchId}: Parsed results object is invalid or missing 'levels'.`);
-         await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Parsed results structure is invalid" } });
-         return res.status(400).json({ success: false, message: 'Parsed results structure is invalid' });
-     }
+    if (!finalResultsObject || typeof finalResultsObject !== 'object' || !finalResultsObject.levels) {
+      console.error(`❌ Callback Error for ${searchId}: Parsed results object is invalid or missing 'levels'.`);
+      await Search.findByIdAndUpdate(searchId, { status: 'failed', responseData: { error: "Parsed results structure is invalid", rawPreview: finalResultsObject } });
+      return res.status(400).json({ success: false, message: 'Parsed results structure is invalid', rawPreview: finalResultsObject });
+    }
     // --- End Validation ---
 
 
