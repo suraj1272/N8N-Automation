@@ -151,7 +151,7 @@ function SearchPage() {
     }
   }, [token]);
 
-onst handleGenerate = async () => {
+const handleGenerate = async () => {
     if (!topic || !token) {
       alert("Please enter a topic and ensure you're logged in");
       return;
@@ -221,7 +221,6 @@ onst handleGenerate = async () => {
       setLoading(false);
     }
   };
-
 
 
   return (
