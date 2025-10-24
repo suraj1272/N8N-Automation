@@ -27,10 +27,13 @@ mongoose.connect(process.env.MONGO_URI, {
 .catch(err => console.log(err));
 
 // Routes
-// We remove '/api' because vercel.json already handles it
+// 
+// FIXED: All routes must have the /api prefix to match
+// what vercel.json is sending to this file.
+//
 app.use('/api/auth', require('./routes/auth'));
-app.use('/search', require('./routes/search'));
-app.use('/progress', require('./routes/progress'));
+app.use('/api/search', require('./routes/search'));
+app.use('/api/progress', require('./routes/progress'));
 
 // Export the app for Vercel (THIS IS CRITICAL)
 // DO NOT USE app.listen()
