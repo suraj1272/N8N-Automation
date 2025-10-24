@@ -1,333 +1,96 @@
 const express = require('express');
 const axios = require('axios');
-const Search = require('../models/Search');
+const Search = require('../models/Search'); // Ensure this model has a 'status' field (String, default: 'processing')
 const auth = require('../middleware/auth');
 const router = express.Router();
 
 // @route   POST /api/search
-// @desc    Generate study material from n8n (3 difficulty levels)
+// @desc    Initiate study material generation via n8n (asynchronous)
 // @access  Private
 router.post('/', auth, async (req, res) => {
   const { topic } = req.body;
 
   if (!topic) {
-    return res.status(400).json({ message: 'Topic is required' });
+    return res.status(400).json({ success: false, message: 'Topic is required' });
   }
 
+  let searchRecord; // To store the created search record
+
   try {
-    console.log('🔹 Calling n8n webhook for topic:', topic);
-
-    // 🔹 Call n8n webhook with retry logic
-    let n8nResponse;
-    let attempts = 0;
-    const maxAttempts = 3;
-
-    while (attempts < maxAttempts) {
-      try {
-        console.log(`🔹 Attempt ${attempts + 1}/${maxAttempts} - Calling n8n webhook for topic: ${topic}`);
-        const response = await axios.post(
-          process.env.N8N_WEBHOOK_URL,
-          { topic },
-          {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 600000, // 10 minute timeout for AI processing
-          }
-        );
-        n8nResponse = response.data;
-        break; // Success, exit retry loop
-      } catch (err) {
-        attempts++;
-        console.error(`❌ Attempt ${attempts}/${maxAttempts} failed:`, err.message);
-
-        if (attempts >= maxAttempts) {
-          throw err; // Re-throw after all attempts failed
-        }
-
-        // Wait before retrying (exponential backoff)
-        const waitTime = Math.pow(2, attempts) * 1000; // 1s, 2s, 4s
-        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-    }
-
-    console.log('🔹 Raw n8n response type:', typeof n8nResponse);
-    console.log('🔹 Is array:', Array.isArray(n8nResponse));
-    if (Array.isArray(n8nResponse)) {
-      console.log('🔹 Array length:', n8nResponse.length);
-      console.log('🔹 First item keys:', n8nResponse[0] ? Object.keys(n8nResponse[0]) : 'empty');
-    }
-
-    // 🔹 Parse n8n response - handle all possible formats
-    let parsedData = null;
-
-    // CASE 1: Array response (most common from n8n)
-    if (Array.isArray(n8nResponse) && n8nResponse.length > 0) {
-      const firstItem = n8nResponse[0];
-      console.log('📦 Processing array response...');
-      
-      // Sub-case: Has 'output' field that's a string (needs parsing)
-      if (firstItem.output && typeof firstItem.output === 'string') {
-        console.log('🔸 Found string output field, parsing JSON...');
-        let cleanOutput;
-        try {
-          cleanOutput = firstItem.output.trim();
-
-          // Remove trailing commas before closing braces/brackets
-          cleanOutput = cleanOutput.replace(/,(\s*[}\]])/g, '$1');
-
-          // Handle incomplete JSON by finding the last complete object/array
-          const openBraces = (cleanOutput.match(/\{/g) || []).length;
-          const closeBraces = (cleanOutput.match(/\}/g) || []).length;
-          const openBrackets = (cleanOutput.match(/\[/g) || []).length;
-          const closeBrackets = (cleanOutput.match(/\]/g) || []).length;
-
-          // If braces/brackets are unbalanced, try to complete the JSON
-          if (openBraces > closeBraces) {
-            // Add missing closing braces
-            cleanOutput += '}'.repeat(openBraces - closeBraces);
-          }
-          if (openBrackets > closeBrackets) {
-            // Add missing closing brackets
-            cleanOutput += ']'.repeat(openBrackets - closeBrackets);
-          }
-
-          // If still incomplete, find the last complete closing brace and truncate
-          if (!cleanOutput.endsWith('}') && !cleanOutput.endsWith(']')) {
-            const lastBraceIndex = cleanOutput.lastIndexOf('}');
-            const lastBracketIndex = cleanOutput.lastIndexOf(']');
-            const lastIndex = Math.max(lastBraceIndex, lastBracketIndex);
-            if (lastIndex > 0) {
-              cleanOutput = cleanOutput.substring(0, lastIndex + 1);
-            }
-          }
-
-          parsedData = JSON.parse(cleanOutput);
-          console.log('✅ Successfully parsed output string');
-        } catch (parseError) {
-          console.error('❌ Failed to parse output string:', parseError.message);
-          console.error('❌ Raw output preview:', firstItem.output.substring(0, 200) + '...');
-          if (cleanOutput) {
-            console.error('❌ Cleaned output preview:', cleanOutput.substring(0, 200) + '...');
-          }
-          throw new Error('Invalid JSON in output field');
-        }
-      }
-      // Sub-case: Has 'output' field that's already an object
-      else if (firstItem.output && typeof firstItem.output === 'object') {
-        console.log('🔸 Found object output field');
-        parsedData = firstItem.output;
-      }
-      // Sub-case: Has 'json' field (some n8n nodes use this)
-      else if (firstItem.json) {
-        console.log('🔸 Found json field');
-        parsedData = firstItem.json;
-      }
-      // Sub-case: The item itself is the data
-      else {
-        console.log('🔸 Using first item directly');
-        parsedData = firstItem;
-      }
-    }
-    // CASE 2: Direct object response
-    else if (typeof n8nResponse === 'object' && !Array.isArray(n8nResponse)) {
-      console.log('📦 Processing direct object response...');
-
-      // Sub-case: Has 'output' field that's a string (needs parsing)
-      if (n8nResponse.output && typeof n8nResponse.output === 'string') {
-        console.log('🔸 Found string output field, parsing JSON...');
-        let cleanOutput;
-        try {
-          // Clean the string first - remove any trailing commas or malformed JSON
-          cleanOutput = n8nResponse.output.trim();
-
-          // Remove trailing commas before closing braces/brackets
-          cleanOutput = cleanOutput.replace(/,(\s*[}\]])/g, '$1');
-
-          // Handle incomplete JSON by finding the last complete object/array
-          const openBraces = (cleanOutput.match(/\{/g) || []).length;
-          const closeBraces = (cleanOutput.match(/\}/g) || []).length;
-          const openBrackets = (cleanOutput.match(/\[/g) || []).length;
-          const closeBrackets = (cleanOutput.match(/\]/g) || []).length;
-
-          // If braces/brackets are unbalanced, try to complete the JSON
-          if (openBraces > closeBraces) {
-            // Add missing closing braces
-            cleanOutput += '}'.repeat(openBraces - closeBraces);
-          }
-          if (openBrackets > closeBrackets) {
-            // Add missing closing brackets
-            cleanOutput += ']'.repeat(openBrackets - closeBrackets);
-          }
-
-          // If still incomplete, find the last complete closing brace and truncate
-          if (!cleanOutput.endsWith('}') && !cleanOutput.endsWith(']')) {
-            const lastBraceIndex = cleanOutput.lastIndexOf('}');
-            const lastBracketIndex = cleanOutput.lastIndexOf(']');
-            const lastIndex = Math.max(lastBraceIndex, lastBracketIndex);
-            if (lastIndex > 0) {
-              cleanOutput = cleanOutput.substring(0, lastIndex + 1);
-            }
-          }
-
-          parsedData = JSON.parse(cleanOutput);
-          console.log('✅ Successfully parsed output string');
-        } catch (parseError) {
-          console.error('❌ Failed to parse output string:', parseError.message);
-          console.error('❌ Raw output preview:', n8nResponse.output.substring(0, 200) + '...');
-          if (cleanOutput) {
-            console.error('❌ Cleaned output preview:', cleanOutput.substring(0, 200) + '...');
-          }
-          throw new Error('Invalid JSON in output field');
-        }
-      }
-      // Sub-case: Has 'output' field that's already an object
-      else if (n8nResponse.output && typeof n8nResponse.output === 'object') {
-        console.log('🔸 Found object output field');
-        parsedData = n8nResponse.output;
-      }
-      // Sub-case: Has 'data' wrapper
-      else if (n8nResponse.data && typeof n8nResponse.data === 'object') {
-        console.log('🔸 Found data wrapper');
-        parsedData = n8nResponse.data;
-      }
-      // Sub-case: Direct data
-      else {
-        console.log('🔸 Using response directly');
-        parsedData = n8nResponse;
-      }
-    }
-    // CASE 3: String response (needs parsing)
-    else if (typeof n8nResponse === 'string') {
-      console.log('📦 Processing string response...');
-      try {
-        parsedData = JSON.parse(n8nResponse);
-        console.log('✅ Successfully parsed string response');
-      } catch (parseError) {
-        console.error('❌ Failed to parse string response:', parseError.message);
-        throw new Error('Invalid JSON string from n8n');
-      }
-    }
-    // CASE 4: Unknown format
-    else {
-      console.error('❌ Unexpected response format:', typeof n8nResponse);
-      throw new Error('Unexpected response format from n8n');
-    }
-
-    // 🔹 Validate and normalize the structure
-    console.log('🔍 Validating data structure...');
-    console.log('🔍 Parsed data keys:', parsedData ? Object.keys(parsedData) : 'null');
-
-    if (!parsedData) {
-      throw new Error('Failed to parse n8n response');
-    }
-
-    // Check if data has the expected 'levels' structure
-    let finalData = {};
-
-    if (parsedData.levels) {
-      // Perfect! Data already has levels
-      console.log('✅ Data has levels structure');
-      finalData = parsedData;
-    } 
-    else if (parsedData.beginner || parsedData.medium || parsedData.advanced) {
-      // Data has level keys but no wrapper - add it
-      console.log('🔧 Wrapping level data...');
-      finalData = {
-        topic: topic,
-        levels: {
-          beginner: parsedData.beginner || {},
-          medium: parsedData.medium || {},
-          advanced: parsedData.advanced || {}
-        }
-      };
-    }
-    else {
-      console.error('❌ Invalid data structure. Keys found:', Object.keys(parsedData));
-      throw new Error('Response missing required levels structure');
-    }
-
-    // Ensure topic field exists
-    if (!finalData.topic) {
-      finalData.topic = topic;
-    }
-
-    // Validate each level has required arrays
-    const levels = ['beginner', 'medium', 'advanced'];
-    levels.forEach(level => {
-      if (!finalData.levels[level]) {
-        console.warn(`⚠️ Missing ${level} level, creating empty structure`);
-        finalData.levels[level] = {};
-      }
-      
-      const levelData = finalData.levels[level];
-      
-      // Ensure all required arrays exist
-      if (!levelData.modules) levelData.modules = [];
-      if (!levelData.quiz) levelData.quiz = [];
-      if (!levelData.coding_problems) levelData.coding_problems = [];
-      if (!levelData.youtube_videos) levelData.youtube_videos = [];
-      
-      console.log(`📊 ${level}: ${levelData.modules.length} modules, ${levelData.quiz.length} quiz, ${levelData.coding_problems.length} problems, ${levelData.youtube_videos.length} videos`);
-    });
-
-    // 🔹 Save to MongoDB
-    const search = new Search({
+    // 1. Save the initial search request with 'processing' status
+    searchRecord = new Search({
       userId: req.user.id,
       topic: topic,
-      responseData: finalData,
+      status: 'processing', // Default status from your updated model
+      // responseData will be added later by the callback
     });
+    await searchRecord.save();
+    console.log('✅ Initial search saved with ID:', searchRecord._id);
 
-    await search.save();
+    // 2. Call n8n webhook asynchronously (n8n MUST be set to respond immediately)
+    console.log('🔹 Calling n8n webhook for topic:', topic, 'with searchId:', searchRecord._id);
 
-    console.log('✅ Search saved to DB with ID:', search._id);
+    // Make sure N8N_WEBHOOK_URL is set correctly in Vercel Environment Variables
+    if (!process.env.N8N_WEBHOOK_URL) {
+       console.error('❌ N8N_WEBHOOK_URL environment variable is not set!');
+       throw new Error('N8N webhook URL is missing in server configuration.');
+    }
 
-    // 🔹 Respond with full structured data
-    res.json({
+    await axios.post(
+      process.env.N8N_WEBHOOK_URL,
+      {
+        topic: topic,
+        searchId: searchRecord._id // Pass the ID to n8n for the callback
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000, // Short timeout (15s) - n8n should respond almost instantly
+      }
+    );
+    console.log('✅ n8n webhook triggered successfully.');
+
+    // 3. Respond immediately to the frontend with 202 Accepted
+    return res.status(202).json({
       success: true,
-      searchId: search._id,
-      topic: topic,
-      data: finalData
+      message: "Processing started. Results will be available soon.",
+      searchId: searchRecord._id,
+      status: 'processing'
     });
 
   } catch (err) {
-    console.error('❌ Error in search route:', err.message);
-    console.error('❌ Stack trace:', err.stack);
+    console.error('❌ Error initiating search:', err.message);
 
-    // Handle axios timeout errors specifically
-    if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
-      return res.status(504).json({
-        success: false,
-        message: 'Request timed out. The AI processing is taking longer than expected. Please try again.',
-        error: 'TIMEOUT'
-      });
+    // If the record was created but the n8n call failed, update status to 'failed'
+    if (searchRecord && searchRecord._id) {
+      try {
+        await Search.findByIdAndUpdate(searchRecord._id, { status: 'failed' });
+        console.log(`⚠️ Marked search ${searchRecord._id} as failed.`);
+      } catch (updateError) {
+        console.error('❌ Failed to update search status to failed:', updateError.message);
+      }
     }
 
-    // Handle 404 errors (webhook not found)
+    // Handle specific errors from the initial webhook call
     if (err.response && err.response.status === 404) {
       return res.status(500).json({
         success: false,
-        message: 'Webhook endpoint not found. Please check your n8n configuration.',
+        message: 'Webhook endpoint not found. Please check configuration.',
         error: 'WEBHOOK_NOT_FOUND'
       });
     }
-
-    // Handle 524 errors (timeout from n8n) - but n8n might still be processing
-    if (err.response && err.response.status === 524) {
-      console.log('⚠️ n8n returned 524 (timeout), but workflow might still be running. Checking if we should wait...');
-
-      // For 524 errors, we might want to implement a polling mechanism
-      // or just inform the user that the process is taking longer
-      return res.status(202).json({
+    // Handle timeouts *from the initial call only* (n8n didn't respond quickly)
+    if (err.code === 'ECONNABORTED' || (err.response && err.response.status === 504)) {
+      return res.status(504).json({
         success: false,
-        message: 'Your request is being processed. The AI generation is taking longer than expected. Please check your topics in a few minutes.',
-        error: 'PROCESSING',
-        checkLater: true
+        message: 'Webhook did not respond quickly to the initial trigger. Please try again.',
+        error: 'INITIAL_TIMEOUT'
       });
     }
 
-    res.status(500).json({
+    // Generic error for other issues during initiation
+    return res.status(500).json({
       success: false,
-      message: 'Failed to generate content',
+      message: 'Failed to initiate content generation',
       error: err.message,
       details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -335,21 +98,23 @@ router.post('/', auth, async (req, res) => {
 });
 
 // @route   GET /api/search
-// @desc    Fetch previous searches
+// @desc    Fetch previous searches (includes status)
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
+    // Only fetch searches belonging to the logged-in user
     const searches = await Search.find({ userId: req.user.id })
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .select('topic createdAt responseData.topic')
-      .lean();
+      .sort({ createdAt: -1 }) // Sort by newest first
+      .limit(50) // Limit the number of results for performance
+      .select('topic createdAt status') // Select only needed fields for the list
+      .lean(); // Use lean() for faster read-only queries
 
-    // Format response for list view
+    // Format the response data
     const formattedSearches = searches.map(search => ({
       _id: search._id,
       topic: search.topic,
-      createdAt: search.createdAt
+      createdAt: search.createdAt,
+      status: search.status || 'unknown' // Add status, provide default if missing
     }));
 
     res.json({
@@ -358,84 +123,153 @@ router.get('/', auth, async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching searches:', err.message);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Server error', 
-      error: err.message 
+      message: 'Server error fetching searches',
+      error: err.message
     });
   }
 });
 
 // @route   GET /api/search/:id
-// @desc    Get a specific search by ID with full data
+// @desc    Get a specific search by ID with full data (checks status)
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
   try {
+    // Find the search by ID *and* ensure it belongs to the logged-in user
     const search = await Search.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      userId: req.user.id, // Security check: User can only access their own searches
     }).lean();
 
     if (!search) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Search not found' 
+        message: 'Search not found or you do not have permission to view it'
       });
     }
 
-    // Return full   data structure
-    res.json({
-      success: true,
-      searchId: search._id,
-      topic: search.topic,
-      data: search.responseData,
-      createdAt: search.createdAt
-    });
+    // --- Handle different statuses ---
+    if (search.status === 'processing') {
+      // Respond with 202 Accepted, indicating it's still working
+      return res.status(202).json({
+          success: true, // Still success, just not ready
+          status: 'processing',
+          message: 'Content generation is still in progress. Please check back later.',
+          searchId: search._id,
+          topic: search.topic,
+          createdAt: search.createdAt
+          // No 'data' field yet
+      });
+    } else if (search.status === 'failed') {
+       // Respond with a server error status if generation failed
+      return res.status(500).json({ // Use 500 status for failed generation state
+          success: false,
+          status: 'failed',
+          message: 'Content generation failed for this topic. You may need to delete it and try again.',
+          searchId: search._id,
+          topic: search.topic,
+          createdAt: search.createdAt
+          // No 'data' field
+      });
+    } else if (search.status === 'completed' && search.responseData) {
+      // If completed and data exists, send the full data
+       res.json({
+         success: true,
+         status: 'completed',
+         searchId: search._id,
+         topic: search.topic,
+         data: search.responseData, // Send the actual AI results
+         createdAt: search.createdAt
+       });
+    } else {
+       // Catch-all for unexpected status or missing data when supposedly completed
+       console.error(`Search ${search._id} has unexpected status (${search.status}) or missing data when status is completed.`);
+       return res.status(500).json({
+          success: false,
+          status: search.status || 'error',
+          message: 'Search record is in an unexpected state (e.g., completed but missing data). Please contact support.',
+          searchId: search._id,
+          topic: search.topic,
+          createdAt: search.createdAt
+       });
+    }
+
   } catch (err) {
-    console.error('Error fetching search:', err.message);
-    res.status(500).json({ 
+    console.error('Error fetching specific search:', err.message);
+     // Handle invalid MongoDB ID format errors
+     if (err.name === 'CastError') {
+       return res.status(400).json({
+         success: false,
+         message: 'Invalid Search ID format',
+         error: err.message
+       });
+     }
+    // Generic server error
+    res.status(500).json({
       success: false,
-      message: 'Server error', 
-      error: err.message 
+      message: 'Server error fetching search details',
+      error: err.message
     });
   }
 });
+
 
 // @route   DELETE /api/search/:id
 // @desc    Delete a specific search and its progress
 // @access  Private
 router.delete('/:id', auth, async (req, res) => {
   try {
+    // Find and delete the search record, ensuring it belongs to the logged-in user
     const search = await Search.findOneAndDelete({
       _id: req.params.id,
-      userId: req.user.id,
+      userId: req.user.id, // Security check
     });
 
+    // If no search was found (or user didn't own it)
     if (!search) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Search not found' 
+        message: 'Search not found or you do not have permission to delete it'
       });
     }
 
-    // Also delete associated progress
-    const Progress = require('../models/Progress');
-    await Progress.deleteMany({ searchId: req.params.id });
+    // Attempt to delete associated progress records (if Progress model exists)
+    try {
+        const Progress = require('../models/Progress'); // Make sure this model exists
+        // Add userId here too for security/scoping
+        const deleteResult = await Progress.deleteMany({ searchId: req.params.id, userId: req.user.id });
+        console.log(`✅ Deleted ${deleteResult.deletedCount} progress records for search: ${req.params.id}`);
+    } catch (progressError) {
+        // Log error but don't fail the whole delete if progress model doesn't exist or deletion fails
+        console.warn('⚠️ Could not delete progress records (this might be normal if none existed):', progressError.message);
+    }
 
-    console.log('✅ Deleted search and progress for:', req.params.id);
+    console.log('✅ Successfully deleted search record:', req.params.id);
 
-    res.json({ 
+    // Send success response
+    res.json({
       success: true,
-      message: 'Search and associated progress deleted'
+      message: 'Search and associated progress deleted successfully'
     });
   } catch (err) {
     console.error('Error deleting search:', err.message);
-    res.status(500).json({ 
+     // Handle invalid MongoDB ID format errors
+     if (err.name === 'CastError') {
+       return res.status(400).json({
+         success: false,
+         message: 'Invalid Search ID format',
+         error: err.message
+       });
+     }
+    // Generic server error
+    res.status(500).json({
       success: false,
-      message: 'Server error', 
-      error: err.message 
+      message: 'Server error during deletion',
+      error: err.message
     });
   }
 });
 
+// Export the router for use in server.js
 module.exports = router;
