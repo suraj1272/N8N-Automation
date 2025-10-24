@@ -138,7 +138,7 @@ function MyTopicsPage() {
     if (!token) return;
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/search`, {
+      const response = await fetch(`${API_BASE_URL}/api/search`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
@@ -166,7 +166,7 @@ function MyTopicsPage() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/search/${searchId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/search/${searchId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });

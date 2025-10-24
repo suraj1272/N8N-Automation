@@ -162,7 +162,7 @@ function TopicViewPage() {
     if (!token || !id) return;
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/search/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/search/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
@@ -213,7 +213,7 @@ function TopicViewPage() {
   const loadProgress = async (searchId) => {
     if (!token) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/progress/${searchId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/progress/${searchId}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (response.ok) {
@@ -238,7 +238,7 @@ function TopicViewPage() {
     }
 
     try {
-      await fetch(`${API_BASE_URL}/progress`, {
+      await fetch(`${API_BASE_URL}/api/progress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
