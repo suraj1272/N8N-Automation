@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import config from '../config';
+import { useAuth } from '../contexts/AuthContext';
+import { api } from '../utils/api';
 
 function Signup({ onSignup, onSwitchToLogin }) {
+  const { login } = useAuth();
   const [formData, setFormData] = useState({ username: '', email: '', password: '', confirmPassword: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -18,14 +20,10 @@ function Signup({ onSignup, onSwitchToLogin }) {
     }
 
     try {
-      const response = await fetch(`${config.API_BASE_URL}/api/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-        }),
+      const response = await api.post('/api/auth/signup', {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
       });
 
       const result = await response.json();
@@ -33,7 +31,7 @@ function Signup({ onSignup, onSwitchToLogin }) {
         throw new Error(result.message || 'Signup failed');
       }
 
-      localStorage.setItem('token', result.token);
+      login(result.token);
       onSignup(result.token);
     } catch (err) {
       setError(err.message);

@@ -41,14 +41,11 @@ mongoose.connect(process.env.MONGO_URI, {
 // --- API Routes ---
 
 // Mount your existing route handlers
-// Vercel routes '/api/auth/...' to './routes/auth.js' via this line
 app.use('/api/auth', authRoutes);
 
-// Vercel routes '/api/search/...' to './routes/search.js' via this line
-// This handles POST /api/search, GET /api/search, GET /api/search/:id, DELETE /api/search/:id
+
 app.use('/api/search', searchRoutes);
 
-// Vercel routes '/api/progress/...' to './routes/progress.js' via this line
 app.use('/api/progress', progressRoutes);
 
 

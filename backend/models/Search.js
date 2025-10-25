@@ -15,6 +15,7 @@ const searchSchema = new mongoose.Schema({
   },
   responseData: {
     type: Object,
+    default: null,
     // Make this NOT required initially, as it's added later by the callback
     // required: true
   },

@@ -1,139 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { BookOpen, Code, Video, Download, ArrowLeft, CheckCircle, Circle, Trophy } from "lucide-react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { BookOpen, Code, Video, Download, ArrowLeft, CheckCircle, Circle, Trophy, LogOut, Sparkles, Zap, Brain, Target } from "lucide-react";
 import jsPDF from "jspdf";
-import config from "../config";
-
-// Reusable Components
-const Card = ({ children, className = "" }) => (
-  <div className={`bg-white rounded-xl shadow-sm border border-gray-100 ${className}`}>
-    {children}
-  </div>
-);
-
-const Button = ({ children, variant = "primary", size = "md", disabled, onClick, className = "" }) => {
-  const baseStyles = "font-medium rounded-lg transition-all duration-200 flex items-center gap-2 justify-center";
-  const variants = {
-    primary: "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-sm hover:shadow-md",
-    secondary: "bg-gray-100 hover:bg-gray-200 text-gray-700",
-    success: "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white",
-    danger: "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white",
-    ghost: "hover:bg-gray-100 text-gray-700"
-  };
-  const sizes = {
-    sm: "px-3 py-1.5 text-sm",
-    md: "px-4 py-2.5",
-    lg: "px-6 py-3 text-lg"
-  };
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
-
-const Badge = ({ children, variant = "default" }) => {
-  const variants = {
-    default: "bg-blue-100 text-blue-700",
-    success: "bg-green-100 text-green-700",
-    warning: "bg-yellow-100 text-yellow-700"
-  };
-
-  return (
-    <span className={`px-3 py-1 rounded-full text-sm font-medium ${variants[variant]}`}>
-      {children}
-    </span>
-  );
-};
-
-const Loader = () => (
-  <div className="flex flex-col items-center justify-center py-12">
-    <div className="relative w-16 h-16">
-      <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-200 rounded-full"></div>
-      <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
-    </div>
-    <p className="mt-4 text-gray-600 font-medium">Loading topic...</p>
-  </div>
-);
-
-const ModuleCard = ({ module, index, isRead, onMarkRead }) => (
-  <div className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-    <div className="flex items-start justify-between gap-4">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-2">
-          {isRead ? (
-            <CheckCircle className="text-green-600 flex-shrink-0" size={20} />
-          ) : (
-            <Circle className="text-gray-400 flex-shrink-0" size={20} />
-          )}
-          <h4 className="font-semibold text-gray-900">{module.title}</h4>
-        </div>
-        {module.content && <p className="text-gray-600 text-sm leading-relaxed ml-7">{module.content}</p>}
-      </div>
-      <Button
-        variant={isRead ? "success" : "primary"}
-        size="sm"
-        onClick={onMarkRead}
-        disabled={isRead}
-      >
-        {isRead ? "Read" : "Mark Read"}
-      </Button>
-    </div>
-  </div>
-);
-
-const QuizCard = ({ quiz, index, isCompleted, onMarkComplete }) => (
-  <div className="p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg">
-    <div className="flex items-start justify-between gap-4 mb-3">
-      <div className="flex items-start gap-2 flex-1">
-        <span className="font-bold text-purple-600 mt-1">Q{index + 1}</span>
-        <p className="font-medium text-gray-900">{quiz.question}</p>
-      </div>
-      <Button
-        variant={isCompleted ? "success" : "primary"}
-        size="sm"
-        onClick={onMarkComplete}
-        disabled={isCompleted}
-      >
-        {isCompleted ? "Done" : "Complete"}
-      </Button>
-    </div>
-    {quiz.answer && (
-      <div className="ml-8 p-3 bg-white rounded-lg border border-green-200">
-        <p className="text-sm text-gray-700">
-          <span className="font-semibold text-green-700">Answer:</span> {quiz.answer}
-        </p>
-      </div>
-    )}
-  </div>
-);
-
-const CodingProblemCard = ({ problem, index }) => (
-  <div className="p-4 bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg border border-gray-200">
-    <div className="flex items-center gap-2 mb-3">
-      <Code className="text-blue-600" size={20} />
-      <h4 className="font-semibold text-gray-900">Problem {index + 1}</h4>
-    </div>
-    <p className="text-gray-700 mb-4">{problem.problem}</p>
-    {problem.solution && (
-      <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-        <pre className="text-sm text-green-400 font-mono">
-          <code>{problem.solution}</code>
-        </pre>
-      </div>
-    )}
-  </div>
-);
+import { useAuth } from "../contexts/AuthContext";
+import { api } from "../utils/api";
+import TopNavigation from "../components/TopNavigation";
+import Card from "../components/Card";
+import Button from "../components/Button";
+import Badge from "../components/Badge";
+import Loader from "../components/Loader";
+import TopicHeader from "../components/TopicHeader";
+import ProgressCard from "../components/ProgressCard";
+import ModuleCard from "../components/ModuleCard";
+import QuizCard from "../components/QuizCard";
+import CodingProblemCard from "../components/CodingProblemCard";
 
 function TopicViewPage() {
   const { id } = useParams();
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [topic, setTopic] = useState("");
   const [data, setData] = useState({
     modules: [],
@@ -148,61 +33,51 @@ function TopicViewPage() {
     quizzesCompleted: []
   });
 
-  const API_BASE_URL = config.API_BASE_URL;
-
   useEffect(() => {
-    if (!token) {
-      window.location.href = '/login';
-      return;
-    }
-    setUser({ email: 'user@example.com' });
     loadTopic();
-  }, [token, id]);
+  }, [id]);
+
+  const handleLogout = () => {
+    logout();
+  };
 
   const loadTopic = async () => {
-    if (!token || !id) return;
+    if (!id) return;
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/search/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const res = await response.json();
+      const response = await api.get(`/api/search/${id}`);
+      const res = await response.json();
 
-        // Normalize data safely
-        let mergedModules = [];
-        let mergedQuizzes = [];
-        let mergedCoding = [];
-        let mergedVideos = [];
+      let mergedModules = [];
+      let mergedQuizzes = [];
+      let mergedCoding = [];
+      let mergedVideos = [];
 
-        if (res.data) {
-          mergedModules = Array.isArray(res.data.modules) ? res.data.modules : [];
-          mergedQuizzes = Array.isArray(res.data.quiz) ? res.data.quiz : [];
-          mergedCoding = Array.isArray(res.data.coding_problems) ? res.data.coding_problems : [];
-          mergedVideos = Array.isArray(res.data.youtube_videos) ? res.data.youtube_videos : [];
+      if (res.data) {
+        mergedModules = Array.isArray(res.data.modules) ? res.data.modules : [];
+        mergedQuizzes = Array.isArray(res.data.quiz) ? res.data.quiz : [];
+        mergedCoding = Array.isArray(res.data.coding_problems) ? res.data.coding_problems : [];
+        mergedVideos = Array.isArray(res.data.youtube_videos) ? res.data.youtube_videos : [];
 
-          if (res.data.levels) {
-            Object.values(res.data.levels).forEach(level => {
-              if (Array.isArray(level.modules)) mergedModules.push(...level.modules);
-              if (Array.isArray(level.quiz)) mergedQuizzes.push(...level.quiz);
-              if (Array.isArray(level.coding_problems)) mergedCoding.push(...level.coding_problems);
-              if (Array.isArray(level.youtube_videos)) mergedVideos.push(...level.youtube_videos);
-            });
-          }
+        if (res.data.levels) {
+          Object.values(res.data.levels).forEach(level => {
+            if (Array.isArray(level.modules)) mergedModules.push(...level.modules);
+            if (Array.isArray(level.quiz)) mergedQuizzes.push(...level.quiz);
+            if (Array.isArray(level.coding_problems)) mergedCoding.push(...level.coding_problems);
+            if (Array.isArray(level.youtube_videos)) mergedVideos.push(...level.youtube_videos);
+          });
         }
-
-        setTopic(res.topic || res.data?.topic || "Unknown Topic");
-        setData({
-          modules: mergedModules,
-          quiz: mergedQuizzes,
-          coding_problems: mergedCoding,
-          youtube_videos: mergedVideos
-        });
-
-        loadProgress(id);
-      } else {
-        throw new Error('Failed to load topic');
       }
+
+      setTopic(res.topic || res.data?.topic || "Unknown Topic");
+      setData({
+        modules: mergedModules,
+        quiz: mergedQuizzes,
+        coding_problems: mergedCoding,
+        youtube_videos: mergedVideos
+      });
+
+      loadProgress(id);
     } catch (err) {
       console.error('Error loading topic:', err);
       setError('Failed to load topic. Please try again.');
@@ -212,25 +87,20 @@ function TopicViewPage() {
   };
 
   const loadProgress = async (searchId) => {
-    if (!token) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/progress/${searchId}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const response = await api.get(`/api/progress/${searchId}`);
+      const prog = await response.json();
+      setProgress({
+        modulesRead: Array.isArray(prog.progress?.modulesRead) ? prog.progress.modulesRead : [],
+        quizzesCompleted: Array.isArray(prog.progress?.quizzesCompleted) ? prog.progress.quizzesCompleted : []
       });
-      if (response.ok) {
-        const prog = await response.json();
-        setProgress({
-          modulesRead: Array.isArray(prog.modulesRead) ? prog.modulesRead : [],
-          quizzesCompleted: Array.isArray(prog.quizzesCompleted) ? prog.quizzesCompleted : []
-        });
-      }
     } catch (err) {
       console.error('Error loading progress:', err);
     }
   };
 
   const updateProgress = async (type, index) => {
-    if (!id || !token) return;
+    if (!id) return;
     const newProgress = { ...progress };
     if (type === 'module') {
       if (!newProgress.modulesRead.includes(index)) newProgress.modulesRead.push(index);
@@ -239,14 +109,12 @@ function TopicViewPage() {
     }
 
     try {
-      await fetch(`${API_BASE_URL}/api/progress`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          searchId: id,
+      await api.post('/api/progress', {
+        searchId: id,
+        progress: {
           modulesRead: newProgress.modulesRead,
           quizzesCompleted: newProgress.quizzesCompleted,
-        }),
+        },
       });
       setProgress(newProgress);
     } catch (err) {
@@ -254,20 +122,9 @@ function TopicViewPage() {
     }
   };
 
-  const handleDownload = () => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${topic.replace(/\s+/g, '_')}_learning_data.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
-
   const handleDownloadCertificate = () => {
     const doc = new jsPDF();
 
-    // Set up the PDF
     doc.setFontSize(24);
     doc.setFont("helvetica", "bold");
     doc.text("Certificate of Completion", 105, 40, { align: "center" });
@@ -303,81 +160,109 @@ function TopicViewPage() {
     doc.setFont("helvetica", "italic");
     doc.text("Generated by Learning Frontend", 105, 210, { align: "center" });
 
-    // Save the PDF
     doc.save(`${topic.replace(/\s+/g, '_')}_certificate.pdf`);
   };
 
   const totalProgress = (progress?.modulesRead?.length || 0) + (progress?.quizzesCompleted?.length || 0);
   const totalItems = (data?.modules?.length || 0) + (data?.quiz?.length || 0);
 
-  if (loading) return <Loader />;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Link to="/my-topics">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft size={20} /> Back to My Topics
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">{topic}</h1>
-              <p className="text-gray-600 mt-1">Your personalized learning path</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {/* <Button variant="success" onClick={handleDownload}>
-              <Download size={20} /> Download
-            </Button> */}
-            <Button
-              variant="primary"
-              onClick={handleDownloadCertificate}
-              disabled={totalProgress !== totalItems || totalItems === 0}
-            >
-              <Trophy size={20} /> Download Certificate
-            </Button>
-          </div>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-purple-50 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-200 to-purple-200 transform rotate-12 scale-150"></div>
         </div>
+        
+        <TopNavigation onLogout={handleLogout} />
 
-        <div className="space-y-6">
-          <Card className="p-6 bg-gradient-to-br from-blue-600 to-purple-600 text-white">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-3xl font-bold mb-2">{topic}</h2>
-                <p className="opacity-90">Your personalized learning path</p>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 py-16">
+          <Card className="p-16 shadow-2xl border-0 bg-white/90 backdrop-blur-lg rounded-2xl">
+            <Loader />
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-purple-50 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-200 to-purple-200 transform rotate-12 scale-150"></div>
+        </div>
+        
+        <TopNavigation onLogout={handleLogout} />
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 py-16">
+          <Card className="p-8 border-red-300 bg-red-50 shadow-xl rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-lg font-bold">⚠️</span>
               </div>
-              <Trophy size={48} className="opacity-80" />
-            </div>
-            <div className="mt-6">
-              <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium">Overall Progress</span>
-                <span className="text-sm font-medium">{totalProgress}/{totalItems} completed</span>
-              </div>
-              <div className="w-full bg-white/20 rounded-full h-3">
-                <div
-                  className="bg-white h-full rounded-full transition-all duration-500"
-                  style={{ width: `${totalItems > 0 ? (totalProgress / totalItems) * 100 : 0}%` }}
-                />
-              </div>
+              <p className="text-red-800 font-semibold text-lg">{error}</p>
             </div>
           </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-purple-50 relative overflow-hidden">
+      {/* Background pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-200 to-purple-200 transform rotate-12 scale-150"></div>
+      </div>
+      
+      <TopNavigation onLogout={handleLogout} />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-4 py-16">
+        {/* Back Button */}
+        <div className="mb-8">
+          <Link to="/my-topics">
+            <Button variant="ghost" size="sm" className="hover:bg-white/50 backdrop-blur-sm shadow-sm">
+              <ArrowLeft size={20} /> Back to My Topics
+            </Button>
+          </Link>
+        </div>
+
+        <TopicHeader topic={topic} />
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-3 mb-8">
+          <Button
+            variant="primary"
+            onClick={handleDownloadCertificate}
+            disabled={totalProgress !== totalItems || totalItems === 0}
+            className={`px-6 py-3 text-lg font-semibold shadow-xl ${
+              totalProgress === totalItems && totalItems > 0
+                ? "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
+          >
+            <Trophy size={24} /> 
+            {totalProgress === totalItems && totalItems > 0 ? "Download Certificate" : "Complete All to Unlock"}
+          </Button>
+        </div>
+
+        <div className="space-y-8">
+          <ProgressCard topic={topic} totalProgress={totalProgress} totalItems={totalItems} />
 
           {/* Modules */}
           {Array.isArray(data?.modules) && data.modules.length > 0 && (
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <BookOpen className="text-blue-600" size={24} />
-                  <h3 className="text-2xl font-bold text-gray-900">Learning Modules</h3>
+            <Card className="p-8 shadow-xl border-0 bg-white/90 backdrop-blur-lg rounded-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <BookOpen className="text-white" size={24} />
+                  </div>
+                  <h3 className="text-3xl font-black text-gray-900">Learning Modules</h3>
                 </div>
-                <Badge variant="default">
+                <Badge variant="default" className="text-base px-4 py-2">
                   {progress.modulesRead.length}/{data.modules.length} Complete
                 </Badge>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {data.modules.map((module, index) => (
                   <ModuleCard
                     key={index}
@@ -393,17 +278,19 @@ function TopicViewPage() {
 
           {/* Quizzes */}
           {Array.isArray(data?.quiz) && data.quiz.length > 0 && (
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="text-purple-600" size={24} />
-                  <h3 className="text-2xl font-bold text-gray-900">Knowledge Check</h3>
+            <Card className="p-8 shadow-xl border-0 bg-white/90 backdrop-blur-lg rounded-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <CheckCircle className="text-white" size={24} />
+                  </div>
+                  <h3 className="text-3xl font-black text-gray-900">Knowledge Check</h3>
                 </div>
-                <Badge variant="warning">
+                <Badge variant="warning" className="text-base px-4 py-2">
                   {progress.quizzesCompleted.length}/{data.quiz.length} Answered
                 </Badge>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {data.quiz.map((q, index) => (
                   <QuizCard
                     key={index}
@@ -419,12 +306,14 @@ function TopicViewPage() {
 
           {/* Coding Problems */}
           {Array.isArray(data?.coding_problems) && data.coding_problems.length > 0 && (
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <Code className="text-blue-600" size={24} />
-                <h3 className="text-2xl font-bold text-gray-900">Coding Challenges</h3>
+            <Card className="p-8 shadow-xl border-0 bg-white/90 backdrop-blur-lg rounded-2xl">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Code className="text-white" size={24} />
+                </div>
+                <h3 className="text-3xl font-black text-gray-900">Coding Challenges</h3>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {data.coding_problems.map((prob, index) => (
                   <CodingProblemCard key={index} problem={prob} index={index} />
                 ))}
@@ -434,31 +323,32 @@ function TopicViewPage() {
 
           {/* YouTube Videos */}
           {Array.isArray(data?.youtube_videos) && data.youtube_videos.length > 0 && (
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <Video className="text-red-600" size={24} />
-                <h3 className="text-2xl font-bold text-gray-900">Video Resources</h3>
+            <Card className="p-8 shadow-xl border-0 bg-white/90 backdrop-blur-lg rounded-2xl">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Video className="text-white" size={24} />
+                </div>
+                <h3 className="text-3xl font-black text-gray-900">Video Resources</h3>
               </div>
-              <div className="grid gap-3">
+              <div className="grid gap-4">
                 {data.youtube_videos.map((video, index) => (
                   <a
                     key={index}
                     href={video}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group"
+                    className="flex items-center gap-4 p-6 bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 rounded-xl transition-all duration-300 group shadow-sm hover:shadow-md"
                   >
-                    <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Video className="text-white" size={20} />
+                    <div className="w-14 h-14 bg-gradient-to-br from-red-600 to-pink-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                      <Video className="text-white" size={24} />
                     </div>
-                    <span className="text-gray-700 group-hover:text-blue-600 transition-colors flex-1 truncate">{video}</span>
-                    <span className="text-gray-400 group-hover:text-blue-600">→</span>
+                    <span className="text-gray-700 group-hover:text-blue-600 transition-colors flex-1 truncate font-medium text-lg">{video}</span>
+                    <span className="text-2xl text-gray-400 group-hover:text-blue-600 group-hover:translate-x-2 transition-all">→</span>
                   </a>
                 ))}
               </div>
             </Card>
           )}
-
         </div>
       </div>
     </div>

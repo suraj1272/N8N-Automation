@@ -106,7 +106,7 @@ router.get('/', auth, async (req, res) => {
     const searches = await Search.find({ userId: req.user.id })
       .sort({ createdAt: -1 }) // Sort by newest first
       .limit(50) // Limit the number of results for performance
-      .select('topic createdAt status') // Select only needed fields for the list
+      .select('topic createdAt status responseData') // Include responseData for progress calculation
       .lean(); // Use lean() for faster read-only queries
 
     // Format the response data
@@ -114,7 +114,8 @@ router.get('/', auth, async (req, res) => {
       _id: search._id,
       topic: search.topic,
       createdAt: search.createdAt,
-      status: search.status || 'unknown' // Add status, provide default if missing
+      status: search.status || 'unknown', // Add status, provide default if missing
+      responseData: search.responseData // Include responseData for dashboard progress calculation
     }));
 
     res.json({
