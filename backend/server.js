@@ -32,8 +32,8 @@ app.use(express.json());
 // Use console.error for database connection errors
 mongoose.connect(process.env.MONGO_URI, {
   // These options are deprecated but often included for older tutorials
-   //useNewUrlParser: true,
-  // useUnifiedTopology: true,
+  useNewUrlParser: true,
+   useUnifiedTopology: true,
 })
 .then(() => console.log('MongoDB connected successfully'))
 .catch(err => console.error('MongoDB connection error:', err.message)); // Log only the error message
@@ -129,8 +129,8 @@ app.post('/api/search/callback', async (req, res) => {
         console.warn(`⚠️ Parsing attempts failed for results.output (searchId: ${searchId}). Saving raw output for inspection.`);
         console.error('Raw output preview:', results.output.substring(0, 1000));
       }
-    } else if (typeof results === 'object' && results !== null && results.levels) {
-      console.log('🔸 Callback: Received results object directly with "levels" property.');
+    } else if (typeof results === 'object' && results !== null && (results.levels || results.error)) {
+      console.log('🔸 Callback: Received results object directly with "levels" or "error" property.');
       finalResultsObject = results;
     } else {
       console.error(`❌ Callback Error for ${searchId}: Received results object has unexpected structure. Type: ${typeof results}. Keys:`, (results && typeof results === 'object') ? Object.keys(results) : 'N/A');
@@ -173,7 +173,7 @@ app.post('/api/search/callback', async (req, res) => {
       return null;
     };
 
-    if (!finalResultsObject.levels) {
+    if (!finalResultsObject.levels && !finalResultsObject.error) { // Only search if it's not already an error
       console.log(`🔎 'levels' not found at top-level for searchId ${searchId}. Attempting nested search...`);
       const found = findNestedProperty(finalResultsObject, 'levels');
       if (found) {
@@ -193,6 +193,37 @@ app.post('/api/search/callback', async (req, res) => {
         finalResultsObject = Object.assign({}, finalResultsObject, { levels: levelsValue });
       }
     }
+
+    // --- <<< START: Explicitly check for the structured error object from n8n >>> ---
+    // This checks for the { "error": "...", "message": "..." } object
+    if (finalResultsObject && finalResultsObject.error) {
+      console.warn(`⚠️ Callback for ${searchId} contained a structured error from n8n: ${finalResultsObject.error}`);
+      
+      // Save the specific error details from n8n
+      const updatedSearch = await Search.findByIdAndUpdate(
+        searchId,
+        { 
+          status: 'failed', 
+          responseData: { 
+            error: finalResultsObject.error, 
+            message: finalResultsObject.message,
+            rawPreview: finalResultsObject.rawOutput || finalResultsObject.rawPreview || null
+          } 
+        },
+        { new: true }
+      );
+
+      if (!updatedSearch) {
+          console.error(`❌ Callback Error: Could not find Search record with ID: ${searchId} during error update.`);
+          return res.status(404).json({ success: false, message: 'Search record not found.' });
+      }
+
+      // Return 200 OK because the *callback itself* was processed correctly
+      console.log(`✅ Callback Success: Successfully updated search ${searchId} with status 'failed'.`);
+      return res.status(200).json({ success: true, message: 'Callback processed, failure noted.' });
+    }
+    // --- <<< END new error check >>> ---
+
 
     // --- Validate the PARSED results structure ---
     if (!finalResultsObject || typeof finalResultsObject !== 'object' || !finalResultsObject.levels) {
@@ -224,9 +255,9 @@ app.post('/api/search/callback', async (req, res) => {
   } catch (error) {
     console.error('❌ Critical Error processing n8n callback:', error.message);
     console.error('Stack Trace:', error.stack);
-     if (error.name === 'CastError') {
-       return res.status(400).json({ success: false, message: 'Invalid Search ID format received in callback', error: error.message });
-     }
+      if (error.name === 'CastError') {
+        return res.status(400).json({ success: false, message: 'Invalid Search ID format received in callback', error: error.message });
+      }
     res.status(500).json({ success: false, message: 'Internal server error processing callback', error: error.message });
   }
 });

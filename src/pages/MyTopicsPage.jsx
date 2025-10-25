@@ -78,7 +78,13 @@ const TopicCard = ({ search, onView, onDelete }) => {
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-2">
             <BookOpen className="text-blue-600" size={24} />
-            <h3 className="text-xl font-bold text-gray-900">{search.topic}</h3>
+            <h3 className="text-xl font-bold text-gray-900">
+              {search.status === 'processing' ? (
+                <span className="text-orange-600">Generating... {search.topic}</span>
+              ) : (
+                search.topic
+              )}
+            </h3>
           </div>
           <div className="flex items-center gap-2 text-gray-500 text-sm mb-4">
             <Calendar size={16} />
