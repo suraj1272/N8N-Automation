@@ -231,11 +231,7 @@ app.post('/api/search/callback', async (req, res) => {
   }
 });
 
-// --- Vercel Export ---
-// This line is essential for Vercel to run your Express app as a serverless function.
-// It replaces the traditional app.listen(PORT, ...)
 
-// For local development, start the server if this file is run directly
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
